@@ -27,6 +27,8 @@ media/
 # Virtual Environment
 venv/
 ENV/
+# Static Files
+static/
 
 # IDE
 .idea/
