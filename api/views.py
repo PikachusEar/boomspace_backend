@@ -26,8 +26,8 @@ def wechat_login(request):
     if not js_code:
         return JsonResponse({"message": "Invalid request. This URL only handles login requests"}, status=400)
 
-    appid = 'wx34b51c411359925c'
-    secret = 'e8d993255e0c9a155539b44c86866020'
+    appid = 'wxf6763bd29ed9f729'
+    secret = '27c0745e1765f6f910aea2ede37f6009'
     url = f"https://api.weixin.qq.com/sns/jscode2session?appid={appid}&secret={secret}&js_code={js_code}&grant_type=authorization_code"
 
     response = requests.get(url)
@@ -315,6 +315,7 @@ def view_user_info(request):
         'last_name': user.last_name,
         'gender': user.gender,
         'birth_date': user.birth_date.strftime('%Y-%m-%d') if user.birth_date else None,
+        'wallet_balance': user.wallet_balance
     }
     return JsonResponse(user_data)
 

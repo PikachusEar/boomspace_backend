@@ -27,7 +27,14 @@ SECRET_KEY = 'django-insecure-3&lf+gcz5k_qq27ib#i_it6r95vy(k!zaz*#$iv#szua+ntml9
 DEBUG = True
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1','47.89.131.32','boomspace.ca','boomspace.acornyun.com']
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://boomspace.ca',
+    'https://www.boomspace.ca',
+    'https://boomspace.acornyun.com',
+    'https://www.boomspace.acornyun.com'
+]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -36,8 +43,8 @@ REST_FRAMEWORK = {
 }
 
 AUTH_USER_MODEL = 'api.User'
-MEDIA_ROOT = BASE_DIR / 'media'
-MEDIA_URL = 'http://localhost/media/'
+MEDIA_ROOT = '/var/www/boomspace/media'
+MEDIA_URL = 'https://boomspace.acornyun.com/media/'
 # Application definition
 
 INSTALLED_APPS = [
@@ -63,7 +70,11 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'Wechat_django.urls'
+ROOT_URLCONF = 'Wechat_django.urls' 
+CSRF_COOKIE_SECURE = True  # 用于HTTPS
+SESSION_COOKIE_SECURE = True  # 用于HTTPS
+CSRF_COOKIE_HTTPONLY = True
+CSRF_USE_SESSIONS = True
 
 TEMPLATES = [
     {
@@ -134,8 +145,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+STATIC_URL = 'https://boomspace.acornyun.com/static/'
+STATIC_ROOT = '/var/www/boomspace/static'
 #STATICFILES_DIRS = [
 #     os.path.join(BASE_DIR, "static"),
 # ]
