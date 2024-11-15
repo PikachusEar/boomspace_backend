@@ -24,9 +24,13 @@ local_settings.py
 db.sqlite3
 media/
 
+# Migrations
+api/migrations/
+
 # Virtual Environment
 venv/
 ENV/
+
 # Static Files
 static/
 
