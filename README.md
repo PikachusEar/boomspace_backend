@@ -15,6 +15,9 @@ Gym Reservation System 是一个为健身房预约篮球场地而设计的微信
 - **前端**: 微信小程序
 
 ## 更新
+- **1118**: 更改了后台管理界面和首页的Title
+- **1115**: 在admin的管理后台添加了"recharge"功能，方便为用户进行充值，每次充值生成充值记录方便财务管理
+- **...**:
 - **0826**: 添加了"get_images" api，返回swiper和news的图片url和文本，需提前配置Nginx代理服务器以对静态图片进行响应，完成Nginx配置后需要对"/api/views.py"的相应代码段进行修改
 - **0817**: 添加了"view_user_info", "update_user_info"两个新api视图，添加了"Image"和"News"两个新model用于前端的首页展示
 - **0815**: 对"wechat_login"的小程序前端进行了适配，配置了新的测试号appid & secret，添加了"is_new_user"的布尔值以便于发布小程序发布欢迎信息，完成了新用户和老用户的登陆验证功能(返回微信官方服务器的openid并进行保存)
