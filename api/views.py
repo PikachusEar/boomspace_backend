@@ -178,7 +178,7 @@ def make_reservation(request):
         timeslot=timeslot,
         date=reservation_date,
         price=timeslot.price,
-        status='pending'  # 默认为待确认状态
+        status='confirmed'  # 默认为确认状态
     )
 
     # 返回成功信息及预订详情
@@ -258,7 +258,7 @@ def make_combo_reservation(request):
             timeslot=timeslot,
             date=reservation_date,
             price=individual_price,
-            status='pending',  # 保持与make_reservation一致，使用'pending'状态
+            status='confirmed',  # 保持与make_reservation一致
             is_combo=True
 
         )
