@@ -4,9 +4,11 @@ from django.contrib import messages
 from django.contrib.admin.options import ModelAdmin
 from django.db import transaction
 from .models import User, Court, TimeSlot, Reservation, News, Image, CourtCombo, RechargeRecord
-from django.http import HttpResponse
+from django.template.response import TemplateResponse
+from datetime import datetime, timedelta
 import csv
-from datetime import datetime
+from django.urls import path
+from django.http import HttpResponse, HttpResponseRedirect
 
 class ExportCsvMixin:
     def export_as_csv(self, request, queryset):
@@ -33,13 +35,13 @@ class ExportCsvMixin:
 
 
 class UserAdmin(ExportCsvMixin, admin.ModelAdmin):
-    list_display = ['wechat_id', 'wechat_nickname', 'phone', 'email', 'first_name', 'last_name', 'gender', 'birth_date', 'wallet_balance', 'date_joined']
+    list_display = ['wechat_nickname', 'phone', 'email', 'first_name', 'last_name', 'gender', 'birth_date', 'wallet_balance', 'date_joined']
     search_fields = ['wechat_nickname', 'first_name', 'last_name', 'wechat_id', 'phone', 'email']
     actions = ['export_as_csv']
 
 class ReservationAdmin(ExportCsvMixin, admin.ModelAdmin):
     list_display = ('user', 'date', 'timeslot', 'status', 'unique_id', 'created_at')
-    search_fields = ('unique_id', 'user__wechat_nickname', 'status')
+    search_fields = ('unique_id', 'user__wechat_nickname', 'user__email', 'user__phone')
     readonly_fields = ('unique_id',)  # 确保 UUID 字段是只读的
     ordering = ('-created_at',)
     actions = ['export_as_csv']
@@ -69,7 +71,77 @@ class TimeSlotAdmin(ExportCsvMixin, admin.ModelAdmin):
     list_display = ['court', 'start_time', 'end_time', 'day_of_week', 'price', 'is_peak', 'is_active']
     list_filter = ['court', 'day_of_week', 'is_peak']
     search_fields = ['court__name']
-    actions = ['export_as_csv']
+    actions = ['export_as_csv']  # 只保留导出功能
+    change_list_template = 'admin/timeslot/change_list.html'  # 使用自定义模板
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('batch-create/', self.admin_site.admin_view(self.batch_create_view), name='batch-create-timeslots'),
+        ]
+        return custom_urls + urls
+
+    def batch_create_view(self, request):
+        if request.method == 'POST':
+            try:
+                court_id = request.POST.get('court')
+                start_time = datetime.strptime(request.POST.get('start_time'), '%H:%M').time()
+                end_time = datetime.strptime(request.POST.get('end_time'), '%H:%M').time()
+                duration = int(request.POST.get('duration'))  # 时长(分钟)
+                price = float(request.POST.get('price'))
+                day_of_week = int(request.POST.get('day_of_week'))
+                is_peak = request.POST.get('is_peak') == 'on'
+
+                court = Court.objects.get(id=court_id)
+
+                # 生成时间段
+                current_time = start_time
+                end_time_delta = datetime.combine(datetime.today(), end_time) - datetime.combine(datetime.today(),
+                                                                                               start_time)
+                total_minutes = end_time_delta.seconds // 60
+
+                created_count = 0
+                with transaction.atomic():
+                    while (datetime.combine(datetime.today(), current_time) + timedelta(
+                            minutes=duration)).time() <= end_time:
+                        next_time = (datetime.combine(datetime.today(), current_time) + timedelta(
+                            minutes=duration)).time()
+
+                        # 创建TimeSlot
+                        TimeSlot.objects.create(
+                            court=court,
+                            start_time=current_time,
+                            end_time=next_time,
+                            day_of_week=day_of_week,
+                            price=price,
+                            is_peak=is_peak
+                        )
+                        created_count += 1
+                        current_time = next_time
+
+                self.message_user(request, f'Successfully created {created_count} time slots')
+                return HttpResponseRedirect("../")
+            except Exception as e:
+                self.message_user(request, f'Error creating time slots: {str(e)}', level=messages.ERROR)
+                return HttpResponseRedirect("../")
+
+        # 如果是GET请求，显示表单
+        context = {
+            'title': 'Batch Create Time Slots',
+            'courts': Court.objects.all(),
+            'day_choices': [
+                (0, 'Every day'),
+                (1, 'Monday'),
+                (2, 'Tuesday'),
+                (3, 'Wednesday'),
+                (4, 'Thursday'),
+                (5, 'Friday'),
+                (6, 'Saturday'),
+                (7, 'Sunday'),
+            ]
+        }
+
+        return TemplateResponse(request, "admin/timeslot_batch_create.html", context)
 
 
 class RechargeRecordAdmin(ExportCsvMixin, admin.ModelAdmin):
