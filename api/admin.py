@@ -67,12 +67,13 @@ class CourtComboAdmin(ExportCsvMixin, admin.ModelAdmin):
     search_fields = ['name']
     actions = ['export_as_csv']
 
+
 class TimeSlotAdmin(ExportCsvMixin, admin.ModelAdmin):
     list_display = ['court', 'start_time', 'end_time', 'day_of_week', 'price', 'is_peak', 'is_active']
     list_filter = ['court', 'day_of_week', 'is_peak']
     search_fields = ['court__name']
-    actions = ['export_as_csv']  # 只保留导出功能
-    change_list_template = 'admin/timeslot/change_list.html'  # 使用自定义模板
+    actions = ['export_as_csv']
+    change_list_template = 'admin/timeslot/change_list.html'
 
     def get_urls(self):
         urls = super().get_urls()
@@ -84,48 +85,61 @@ class TimeSlotAdmin(ExportCsvMixin, admin.ModelAdmin):
     def batch_create_view(self, request):
         if request.method == 'POST':
             try:
+                # 获取表单数据
                 court_id = request.POST.get('court')
-                start_time = datetime.strptime(request.POST.get('start_time'), '%H:%M').time()
-                end_time = datetime.strptime(request.POST.get('end_time'), '%H:%M').time()
-                duration = int(request.POST.get('duration'))  # 时长(分钟)
+                start_time_str = request.POST.get('start_time')
+                end_time_str = request.POST.get('end_time')
+                duration = int(request.POST.get('duration'))
                 price = float(request.POST.get('price'))
                 day_of_week = int(request.POST.get('day_of_week'))
                 is_peak = request.POST.get('is_peak') == 'on'
 
+                # 转换时间字符串为time对象（24小时制）
+                try:
+                    start_time = datetime.strptime(start_time_str, '%H:%M').time()
+                    end_time = datetime.strptime(end_time_str, '%H:%M').time()
+                except ValueError as e:
+                    raise ValueError(f"Invalid time format. Please use 24-hour format (HH:MM). Error: {str(e)}")
+
+                # 获取Court实例
                 court = Court.objects.get(id=court_id)
 
-                # 生成时间段
-                current_time = start_time
-                end_time_delta = datetime.combine(datetime.today(), end_time) - datetime.combine(datetime.today(),
-                                                                                               start_time)
-                total_minutes = end_time_delta.seconds // 60
+                # 使用当前日期作为基准计算时间差
+                base_date = datetime.now().date()
+                start_dt = datetime.combine(base_date, start_time)
+                end_dt = datetime.combine(base_date, end_time)
 
+                # 处理跨越午夜的情况
+                if end_dt <= start_dt:
+                    end_dt += timedelta(days=1)
+
+                # 创建时间段
+                current_dt = start_dt
                 created_count = 0
-                with transaction.atomic():
-                    while (datetime.combine(datetime.today(), current_time) + timedelta(
-                            minutes=duration)).time() <= end_time:
-                        next_time = (datetime.combine(datetime.today(), current_time) + timedelta(
-                            minutes=duration)).time()
 
-                        # 创建TimeSlot
+                with transaction.atomic():
+                    while current_dt + timedelta(minutes=duration) <= end_dt:
+                        next_dt = current_dt + timedelta(minutes=duration)
+
                         TimeSlot.objects.create(
                             court=court,
-                            start_time=current_time,
-                            end_time=next_time,
+                            start_time=current_dt.time(),
+                            end_time=next_dt.time(),
                             day_of_week=day_of_week,
                             price=price,
                             is_peak=is_peak
                         )
                         created_count += 1
-                        current_time = next_time
+                        current_dt = next_dt
 
-                self.message_user(request, f'Successfully created {created_count} time slots')
+                messages.success(request, f'Successfully created {created_count} time slots')
                 return HttpResponseRedirect("../")
+
             except Exception as e:
-                self.message_user(request, f'Error creating time slots: {str(e)}', level=messages.ERROR)
+                messages.error(request, f'Error creating time slots: {str(e)}')
                 return HttpResponseRedirect("../")
 
-        # 如果是GET请求，显示表单
+        # GET请求显示表单
         context = {
             'title': 'Batch Create Time Slots',
             'courts': Court.objects.all(),
