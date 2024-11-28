@@ -133,3 +133,37 @@ class RechargeRecord(models.Model):
         verbose_name = "Charge Record"
         verbose_name_plural = "Charge Record"
         ordering = ['-created_at']
+
+
+class isActivated(models.Model):
+    is_activated = models.BooleanField(default=True, help_text="是否激活实际功能")
+
+    def __str__(self):
+        return "激活" if self.is_activated else "未激活"
+    class Meta:
+        verbose_name = "Activate"
+        verbose_name_plural = "Activate"
+
+class f_News(models.Model):
+    image = models.ImageField(upload_to='news_images/', help_text="上传一张新闻图片")
+    title = models.CharField(max_length=255, help_text="新闻标题")
+    description = models.TextField(help_text="新闻描述")
+    url = models.URLField(max_length=200, help_text="新闻详情的链接")
+
+    def __str__(self):
+        return self.title
+    class Meta:
+        verbose_name = "News for inactivate"
+        verbose_name_plural = "News for inactivate"
+
+class f_Image(models.Model):
+    image = models.ImageField(upload_to='images/')
+    title = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        verbose_name = "Banners for inactivate"
+        verbose_name_plural = "Banners for inactivate"

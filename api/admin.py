@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.contrib import messages
 from django.contrib.admin.options import ModelAdmin
 from django.db import transaction
-from .models import User, Court, TimeSlot, Reservation, News, Image, CourtCombo, RechargeRecord
+from .models import User, Court, TimeSlot, Reservation, News, Image, CourtCombo, RechargeRecord, f_Image, f_News, isActivated
 from django.template.response import TemplateResponse
 from datetime import datetime, timedelta
 import csv
@@ -193,6 +193,19 @@ class RechargeRecordAdmin(ExportCsvMixin, admin.ModelAdmin):
     def has_change_permission(self, request, obj=None):
         return False  # 禁止修改充值记录
 
+
+class f_ImageAdmin(ExportCsvMixin, admin.ModelAdmin):
+    list_display = ('title', 'image', 'description')
+    search_fields = ('title',)
+
+
+class f_NewsAdmin(admin.ModelAdmin):
+    list_display = ('title', 'url', 'image', 'description')
+    search_fields = ('title',)
+
+
+
+
 admin.site.register(User, UserAdmin)
 admin.site.register(Court, CourtAdmin)
 admin.site.register(TimeSlot, TimeSlotAdmin)
@@ -201,3 +214,6 @@ admin.site.register(News, NewsAdmin)
 admin.site.register(Image, ImageAdmin)
 admin.site.register(CourtCombo, CourtComboAdmin)
 admin.site.register(RechargeRecord, RechargeRecordAdmin)
+admin.site.register(f_News, NewsAdmin)
+admin.site.register(f_Image, ImageAdmin)
+admin.site.register(isActivated)

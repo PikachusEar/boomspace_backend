@@ -2,7 +2,7 @@ import uuid
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from datetime import datetime, timedelta
-from .models import User, TimeSlot, Reservation, Court, Image, News, CourtCombo
+from .models import User, TimeSlot, Reservation, Court, Image, News, CourtCombo, isActivated, f_Image, f_News
 import requests
 from django.db.models import Q
 from collections import defaultdict
@@ -339,14 +339,26 @@ def update_user_info(request):
 
 @api_view(['GET'])
 def get_images(request):
-    images = Image.objects.all()
-    newses = News.objects.all()
+    try:
+        activation_status = isActivated.objects.first()
+        is_activated = activation_status.is_activated if activation_status else True
+    except isActivated.DoesNotExist:
+        is_activated = True
+
+    if is_activated:
+        images = Image.objects.all()
+        newses = News.objects.all()
+
+    else:
+        images = f_Image.objects.all()
+        newses = f_News.objects.all()
 
     image_data = [
         {
             'image_url': request.build_absolute_uri(settings.MEDIA_URL + image.image.name),  # 需要配置
             'title': image.title,
             'description': image.description,
+            'is_activated': is_activated,
         } for image in images
     ]
 
