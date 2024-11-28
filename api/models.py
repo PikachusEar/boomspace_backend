@@ -112,6 +112,7 @@ class Image(models.Model):
 
 class News(models.Model):
     image = models.ImageField(upload_to='news_images/', help_text="上传一张新闻图片")
+    poster = models.ImageField(upload_to='news_images/', null=True,help_text="上传一张新闻详情图片")
     title = models.CharField(max_length=255, help_text="新闻标题")
     description = models.TextField(help_text="新闻描述")
     url = models.URLField(max_length=200, help_text="新闻详情的链接")
@@ -146,6 +147,7 @@ class isActivated(models.Model):
 
 class f_News(models.Model):
     image = models.ImageField(upload_to='news_images/', help_text="上传一张新闻图片")
+    poster = models.ImageField(upload_to='news_images/',null=True, help_text="上传一张新闻详情图片")
     title = models.CharField(max_length=255, help_text="新闻标题")
     description = models.TextField(help_text="新闻描述")
     url = models.URLField(max_length=200, help_text="新闻详情的链接")

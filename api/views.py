@@ -367,7 +367,8 @@ def get_images(request):
             'url': news.url,
             'title': news.title,
             'description': news.description,
-            'image_url': request.build_absolute_uri(settings.MEDIA_URL + news.image.name)  # 需要配置
+            'image_url': request.build_absolute_uri(settings.MEDIA_URL + news.image.name),
+            'poster_url': request.build_absolute_uri(settings.MEDIA_URL + news.poster.name)
 
         } for news in newses
     ]
