@@ -51,7 +51,7 @@ class ReservationAdmin(ExportCsvMixin, admin.ModelAdmin):
     ordering = ('-created_at',)
     actions = ['export_as_csv']
     change_list_template = 'admin/reservation/reservation_changelist.html'
-    autocomplete_fields = ['user']
+    autocomplete_fields = ['user', 'timeslot']
 
     def get_urls(self):
         urls = super().get_urls()
