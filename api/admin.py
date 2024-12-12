@@ -195,7 +195,7 @@ class CourtComboAdmin(ExportCsvMixin, admin.ModelAdmin):
 class TimeSlotAdmin(ExportCsvMixin, admin.ModelAdmin):
     list_display = ['court', 'start_time', 'end_time', 'day_of_week', 'price', 'is_peak', 'is_active']
     list_filter = ['court', 'day_of_week', 'is_peak']
-    search_fields = ['court__name']
+    search_fields = ['court__name', 'day_of_week', 'start_time', 'end_time']
     actions = ['export_as_csv']
     change_list_template = 'admin/timeslot/change_list.html'
 
