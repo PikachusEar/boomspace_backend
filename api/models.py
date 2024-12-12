@@ -103,7 +103,18 @@ class TimeSlot(models.Model):
     is_active = models.BooleanField(default=True, help_text="是否激活")
 
     def __str__(self):
-        return f"{self.court.name} from {self.start_time} to {self.end_time} - {'Peak' if self.is_peak else 'Off-peak'}"
+        DAY_OF_WEEK_CHOICES = {
+            0: "每天",
+            1: "周一",
+            2: "周二",
+            3: "周三",
+            4: "周四",
+            5: "周五",
+            6: "周六",
+            7: "周日"
+        }
+        day_of_week_text = DAY_OF_WEEK_CHOICES.get(self.day_of_week, "未知")
+        return f"{self.court.name} {day_of_week_text} from {self.start_time} to {self.end_time} - {'Peak' if self.is_peak else 'Off-peak'}"
 
 
 class Reservation(models.Model):
