@@ -26,35 +26,47 @@ def wechat_login(request):
     if not js_code:
         return JsonResponse({"message": "Invalid request. This URL only handles login requests"}, status=400)
 
-    appid = 'wxf6763bd29ed9f729'
-    secret = '27c0745e1765f6f910aea2ede37f6009'
+    appid = 'wx2d3cffb19c8287b0'
+    secret = '83c88699cf3df428baf0dcc44d64e8a2'
     url = f"https://api.weixin.qq.com/sns/jscode2session?appid={appid}&secret={secret}&js_code={js_code}&grant_type=authorization_code"
 
     response = requests.get(url)
     data = response.json()
 
     if 'errcode' in data and data['errcode'] != 0:
-        return JsonResponse({'status': 'error', 'message': f"微信登录失败: {data.get('errmsg', 'Unknown error')}"},
-                            status=403)
+        return JsonResponse({'status': 'error', 'message': f"微信登录失败: {data.get('errmsg', 'Unknown error')}"}, status=403)
 
     wechat_id = data.get('openid')
     wechat_nickname = 'WeChat User'
 
     # 查找或创建用户
-    user, created = User.objects.get_or_create(wechat_id=wechat_id, defaults={
-        'wechat_nickname': wechat_nickname,
-        # 可以设置其他默认值
-    })
+    user, created = User.objects.get_or_create(
+        wechat_id=wechat_id,
+        defaults={
+            'wechat_nickname': wechat_nickname,
+            # 可以设置其他默认值
+        }
+    )
+
+    # 如果是新用户，设置默认密码: "user_id+3470"
+    if created:
+        # user_id在首次save()时已生成，因此此时应已存在
+        user.set_password(f"{user.user_id}3470")
+        user.save()
+
+    # 判断用户是否已注册email
+    is_registered = bool(user.email)
 
     # 为用户创建或获取现有的Token
-    token, created = Token.objects.get_or_create(user=user)
+    token, _ = Token.objects.get_or_create(user=user)
 
-    # 返回Token而不是进行重定向
+    # 返回Token而不是进行重定向，同时添加is_registered字段
     return JsonResponse({
         'status': 'success',
         'message': '登录成功',
         'token': token.key,
-        'is_new_user': created
+        'is_new_user': created,
+        'is_registered': is_registered
     })
 
 
@@ -143,135 +155,297 @@ def available_timeslots(request):
     return JsonResponse({'available_timeslots': timeslots_data})
 
 
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def make_reservation(request):
-    # 从请求中获取时间段ID和预定日期
-    timeslot_id = request.data.get('timeslot_id')
-    reservation_date = request.data.get('date')
+    # 获取时间段ID列表和日期列表
+    timeslot_ids = request.data.get('timeslot_ids', [])
+    dates = request.data.get('dates', [])
+
+    # 基本验证
+    if not timeslot_ids or not dates:
+        return JsonResponse({
+            'status': 'error',
+            'message': '请提供时间段ID列表和日期列表'
+        }, status=400)
+
+    if not isinstance(timeslot_ids, list) or not isinstance(dates, list):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'timeslot_ids和dates必须是列表格式'
+        }, status=400)
+
+    if len(timeslot_ids) != len(dates):
+        return JsonResponse({
+            'status': 'error',
+            'message': '时间段ID列表和日期列表长度必须相同'
+        }, status=400)
 
     try:
-        # 尝试获取对应的时间段对象
-        timeslot = TimeSlot.objects.get(id=timeslot_id, court__timerange__gte=(timezone.now().date() - timezone.datetime.strptime(reservation_date, "%Y-%m-%d").date()).days)
-    except TimeSlot.DoesNotExist:
-        return JsonResponse({'status': 'error', 'message': '所选时间段不存在'}, status=404)
+        # 解析所有日期并验证格式
+        parsed_dates = []
+        for date_str in dates:
+            try:
+                parsed_date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date()
+                parsed_dates.append(parsed_date)
+            except ValueError:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'无效的日期格式: {date_str}'
+                }, status=400)
 
-    # 检查是否已有预定占用该时间段
-    if Reservation.objects.filter(Q(timeslot=timeslot, date=reservation_date), Q(status='pending') | Q(status='confirmed')).exists():
-        return JsonResponse({'status': 'error', 'message': '预定失败：位置已被预订'}, status=400)
+        # 使用集合去重验证时间段是否存在
+        unique_timeslot_ids = set(timeslot_ids)
+        timeslots_qs = TimeSlot.objects.filter(
+            id__in=unique_timeslot_ids
+        ).select_related('court')
 
-    user = request.user  # 从token中获取用户信息
+        # 验证所有请求的独特时间段ID是否都存在
+        if timeslots_qs.count() != len(unique_timeslot_ids):
+            return JsonResponse({
+                'status': 'error',
+                'message': '一个或多个所选时间段不存在'
+            }, status=404)
 
-    # 检查用户钱包余额是否足够支付场地费用
-    if user.wallet_balance < timeslot.price:
-        return JsonResponse({'status': 'error', 'message': '预定失败，账户余额不足'}, status=400)
+        timeslots_dict = {str(slot.id): slot for slot in timeslots_qs}
+        current_date = timezone.now().date()
 
-    # 扣除用户余额并保存
-    user.wallet_balance -= timeslot.price
-    user.save()
+        # 验证每个(包括重复ID的)时间段与日期的匹配和可预订性
+        for timeslot_id, date in zip(timeslot_ids, parsed_dates):
+            timeslot = timeslots_dict[str(timeslot_id)]
 
-    # 创建预订
-    reservation = Reservation.objects.create(
-        user=user,
-        timeslot=timeslot,
-        date=reservation_date,
-        price=timeslot.price,
-        status='confirmed'  # 默认为确认状态
-    )
+            # 验证时间范围
+            days_ahead = (date - current_date).days
+            if days_ahead < 0 or days_ahead > timeslot.court.timerange:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'时间段 {timeslot.court.name} 在 {date} 已超出可预订范围'
+                }, status=400)
 
-    # 返回成功信息及预订详情
-    return JsonResponse({
-        'status': 'success',
-        'message': '预订成功，请在我的预定中查看预定详情',
-        'reservation_id': str(reservation.unique_id)  # 返回预订的唯一标识符
-    })
+            # 验证星期几
+            booking_weekday = date.isoweekday()  # 获取预订日期的星期几(1-7)
+            if timeslot.day_of_week != 0 and timeslot.day_of_week != booking_weekday:
+                # day_of_week为0表示每天都可预约
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'时间段 {timeslot.court.name} 只能在星期{timeslot.day_of_week}预订，而{date}是星期{booking_weekday}'
+                }, status=400)
+
+        # 检查是否已有预定占用这些时间段
+        reservation_conflicts = Reservation.objects.filter(
+            Q(timeslot__in=timeslots_qs) &
+            Q(date__in=parsed_dates) &
+            (Q(status='pending') | Q(status='confirmed'))
+        ).values('timeslot_id', 'date')
+
+        if reservation_conflicts.exists():
+            return JsonResponse({
+                'status': 'error',
+                'message': '预定失败：一个或多个时间段已被预订'
+            }, status=400)
+
+        # 计算总费用
+        total_price = sum(timeslots_dict[str(tid)].price for tid in timeslot_ids)
+
+        user = request.user
+
+        # 检查用户余额是否充足
+        if user.wallet_balance < total_price:
+            return JsonResponse({
+                'status': 'error',
+                'message': '预定失败，账户余额不足'
+            }, status=400)
+
+        # 创建所有预定
+        reservations = []
+        for timeslot_id, date in zip(timeslot_ids, parsed_dates):
+            timeslot = timeslots_dict[str(timeslot_id)]
+            reservation = Reservation.objects.create(
+                user=user,
+                timeslot=timeslot,
+                date=date,
+                price=timeslot.price,
+                status='confirmed'
+            )
+            reservations.append(reservation)
+
+        # 扣除总金额
+        user.wallet_balance -= total_price
+        user.save()
+
+        # 返回成功信息及预订详情
+        return JsonResponse({
+            'status': 'success',
+            'message': '预订成功，请在我的预定中查看预定详情',
+            'total_price': str(total_price)
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'预订失败：{str(e)}'
+        }, status=500)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @transaction.atomic
 def make_combo_reservation(request):
-    # 从请求中获取时间段ID列表、预定日期和组合场地ID
+    # 从请求中获取时间段ID列表、日期列表和组合场地ID
     timeslot_ids = request.data.get('timeslot_ids', [])
-    reservation_date = request.data.get('date')
+    dates = request.data.get('dates', [])  # 改为接收日期列表
     combo_id = request.data.get('combo_id')
 
-    if not timeslot_ids or not reservation_date or not combo_id:
-        return JsonResponse({'status': 'error', 'message': 'Missing required data'}, status=400)
+    # 基本验证
+    if not timeslot_ids or not dates or not combo_id:
+        return JsonResponse({
+            'status': 'error',
+            'message': '请提供时间段ID列表、日期列表和组合场地ID'
+        }, status=400)
 
-    try:
-        # 解析预定日期
-        reservation_date = datetime.strptime(reservation_date, "%Y-%m-%d").date()
-    except ValueError:
-        return JsonResponse({'status': 'error', 'message': 'Invalid date format'}, status=400)
+    if not isinstance(timeslot_ids, list) or not isinstance(dates, list):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'timeslot_ids和dates必须是列表格式'
+        }, status=400)
 
     try:
         # 获取组合场地信息
         combo = CourtCombo.objects.get(id=combo_id, is_active=True)
         combo_courts = combo.combined_courts.filter(is_active=True)
 
+        # 解析所有日期并验证格式
+        parsed_dates = []
+        for date_str in dates:
+            try:
+                parsed_date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date()
+                parsed_dates.append(parsed_date)
+            except ValueError:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'无效的日期格式: {date_str}'
+                }, status=400)
+
         # 获取时间段信息
         timeslots = TimeSlot.objects.filter(
             id__in=timeslot_ids,
             is_active=True,
-            court__in=combo_courts,
-            court__timerange__gte=(timezone.now().date() - reservation_date).days
-        )
+            court__in=combo_courts
+        ).select_related('court')
 
-        if len(timeslots) != len(timeslot_ids) or len(timeslots) != len(combo_courts):
-            return JsonResponse({'status': 'error', 'message': '所选时间段不存在、不可用或数量不匹配'}, status=404)
+        # 验证时间段数量
+        courts_count = combo_courts.count()
+        if len(timeslots) != len(timeslot_ids) or len(timeslots) % courts_count != 0:
+            return JsonResponse({
+                'status': 'error',
+                'message': '所选时间段不存在、不可用或数量不匹配'
+            }, status=404)
 
-    except (CourtCombo.DoesNotExist, TimeSlot.DoesNotExist):
-        return JsonResponse({'status': 'error', 'message': '所选组合场地或时间段不存在'}, status=404)
+        # 验证日期数量
+        if len(parsed_dates) * courts_count != len(timeslot_ids):
+            return JsonResponse({
+                'status': 'error',
+                'message': '日期数量与时间段组合不匹配'
+            }, status=400)
 
-    # 检查是否已有预定占用该时间段
-    if Reservation.objects.filter(Q(timeslot__in=timeslots, date=reservation_date), Q(status='pending') | Q(status='confirmed')).exists():
-        return JsonResponse({'status': 'error', 'message': '预定失败：一个或多个时间段已被预订'}, status=400)
+        # 验证每个时间段的可用性、时间范围和星期几
+        current_date = timezone.now().date()
+        timeslots_dict = {str(slot.id): slot for slot in timeslots}
 
-    user = request.user  # 从token中获取用户信息
+        for timeslot_id, date in zip(timeslot_ids, parsed_dates * courts_count):
+            timeslot = timeslots_dict[str(timeslot_id)]
 
-    # 计算总价格
-    total_price = sum(timeslot.price for timeslot in timeslots)
-    if combo.fixed_price:
-        price = combo.fixed_price
-    elif combo.discount:
-        price = round(total_price * Decimal(str(combo.discount)), 2)
-    else:
-        price = total_price
+            # 验证时间范围
+            days_ahead = (date - current_date).days
+            if days_ahead < 0 or days_ahead > timeslot.court.timerange:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'时间段 {timeslot.court.name} 在 {date} 已超出可预订范围'
+                }, status=400)
 
-    # 检查用户钱包余额是否足够支付场地费用
-    if user.wallet_balance < price:
-        return JsonResponse({'status': 'error', 'message': '预定失败，账户余额不足'}, status=400)
+            # 验证星期几
+            booking_weekday = date.isoweekday()
+            if timeslot.day_of_week != 0 and timeslot.day_of_week != booking_weekday:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'时间段 {timeslot.court.name} 只能在星期{timeslot.day_of_week}预订，而{date}是星期{booking_weekday}'
+                }, status=400)
 
-    # 扣除用户余额并保存
-    user.wallet_balance -= price
-    user.save()
+        # 检查是否已有预定占用这些时间段
+        reservation_conflicts = Reservation.objects.filter(
+            Q(timeslot__in=timeslots) &
+            Q(date__in=parsed_dates) &
+            (Q(status='pending') | Q(status='confirmed'))
+        ).exists()
 
-    # 创建预订
-    reservations = []
-    individual_price = (price / len(timeslots)).quantize(Decimal('0.01'))
-    for timeslot in timeslots:
-        reservation = Reservation.objects.create(
-            user=user,
-            timeslot=timeslot,
-            date=reservation_date,
-            price=individual_price,
-            status='confirmed',  # 保持与make_reservation一致
-            is_combo=True
+        if reservation_conflicts:
+            return JsonResponse({
+                'status': 'error',
+                'message': '预定失败：一个或多个时间段已被预订'
+            }, status=400)
 
-        )
-        reservations.append(reservation)
+        # 计算总价格
+        base_price_per_combo = sum(timeslot.price for timeslot in timeslots[:courts_count])
+        total_base_price = base_price_per_combo * len(parsed_dates)
 
-    # 返回成功信息及预订详情
-    return JsonResponse({
-        'status': 'success',
-        'message': '预订成功，请在我的预定中查看预定详情',
-        'reservation_ids': [str(res.unique_id) for res in reservations],  # 返回所有预订的唯一标识符
-        'total_price': str(price),
-        'individual_price': str(individual_price)
-    })
+        if combo.fixed_price:
+            total_price = combo.fixed_price * len(parsed_dates)
+        elif combo.discount:
+            total_price = round(total_base_price * Decimal(str(combo.discount)), 2)
+        else:
+            total_price = total_base_price
+
+        user = request.user
+
+        # 检查用户余额是否充足
+        if user.wallet_balance < total_price:
+            return JsonResponse({
+                'status': 'error',
+                'message': '预定失败，账户余额不足'
+            }, status=400)
+
+        # 扣除用户余额并保存
+        user.wallet_balance -= total_price
+        user.save()
+
+        # 创建预订
+        reservations = []
+        individual_price = (total_price / len(timeslots)).quantize(Decimal('0.01'))
+
+        for timeslot_id, date in zip(timeslot_ids, parsed_dates * courts_count):
+            timeslot = timeslots_dict[str(timeslot_id)]
+            reservation = Reservation.objects.create(
+                user=user,
+                timeslot=timeslot,
+                date=date,
+                price=individual_price,
+                status='confirmed',
+                is_combo=True
+            )
+            reservations.append(reservation)
+
+        # 返回成功信息及预订详情
+        return JsonResponse({
+            'status': 'success',
+            'message': '预订成功，请在我的预定中查看预定详情',
+            'reservation_ids': [str(res.unique_id) for res in reservations],
+            'total_price': str(total_price),
+            'individual_price': str(individual_price)
+        })
+
+    except (CourtCombo.DoesNotExist, TimeSlot.DoesNotExist) as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': '所选组合场地或时间段不存在'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'预订失败：{str(e)}'
+        }, status=500)
+
+
 
 
 @api_view(['GET'])
@@ -315,7 +489,8 @@ def view_user_info(request):
         'last_name': user.last_name,
         'gender': user.gender,
         'birth_date': user.birth_date.strftime('%Y-%m-%d') if user.birth_date else None,
-        'wallet_balance': user.wallet_balance
+        'wallet_balance': user.wallet_balance,
+        'user_id': user.user_id
     }
     return JsonResponse(user_data)
 
@@ -367,7 +542,8 @@ def get_images(request):
             'url': news.url,
             'title': news.title,
             'description': news.description,
-            'image_url': request.build_absolute_uri(settings.MEDIA_URL + news.image.name)  # 需要配置
+            'image_url': request.build_absolute_uri(settings.MEDIA_URL + news.image.name),
+            'poster_url': request.build_absolute_uri(settings.MEDIA_URL + news.poster.name)
 
         } for news in newses
     ]

@@ -1,14 +1,18 @@
-
-from django.contrib import admin
 from django.contrib import messages
-from django.contrib.admin.options import ModelAdmin
 from django.db import transaction
 from .models import User, Court, TimeSlot, Reservation, News, Image, CourtCombo, RechargeRecord, f_Image, f_News, isActivated
-from django.template.response import TemplateResponse
-from datetime import datetime, timedelta
+from datetime import timedelta
 import csv
-from django.urls import path
 from django.http import HttpResponse, HttpResponseRedirect
+from django.contrib import admin
+from django.template.response import TemplateResponse
+from django.urls import path
+from django.utils.html import format_html
+from django.utils.timezone import now
+import calendar
+from datetime import datetime
+import json
+from django.core.serializers.json import DjangoJSONEncoder
 
 class ExportCsvMixin:
     def export_as_csv(self, request, queryset):
@@ -35,17 +39,137 @@ class ExportCsvMixin:
 
 
 class UserAdmin(ExportCsvMixin, admin.ModelAdmin):
-    list_display = ['wechat_nickname', 'phone', 'email', 'first_name', 'last_name', 'gender', 'birth_date', 'wallet_balance', 'date_joined']
-    search_fields = ['wechat_nickname', 'first_name', 'last_name', 'wechat_id', 'phone', 'email']
+    list_display = ['user_id','wechat_nickname', 'phone', 'email', 'first_name', 'last_name', 'gender', 'birth_date', 'wallet_balance', 'date_joined']
+    search_fields = ['user_id','wechat_nickname', 'first_name', 'last_name', 'wechat_id', 'phone', 'email']
     actions = ['export_as_csv']
+
 
 class ReservationAdmin(ExportCsvMixin, admin.ModelAdmin):
     list_display = ('user', 'date', 'timeslot', 'status', 'unique_id', 'created_at')
     search_fields = ('unique_id', 'user__wechat_nickname', 'user__email', 'user__phone')
-    readonly_fields = ('unique_id',)  # 确保 UUID 字段是只读的
+    readonly_fields = ('unique_id',)
     ordering = ('-created_at',)
     actions = ['export_as_csv']
+    change_list_template = 'admin/reservation/reservation_changelist.html'
     autocomplete_fields = ['user']
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('calendar/', self.admin_site.admin_view(self.calendar_view), name='reservation-calendar'),
+        ]
+        return custom_urls + urls
+
+    def calendar_view(self, request):
+        year = request.GET.get('year')
+        month = request.GET.get('month')
+        selected_court = request.GET.get('court', 'all')
+
+        today = now().date()
+        year = int(year) if year else today.year
+        month = int(month) if month else today.month
+
+        start_date = datetime(year, month, 1).date()
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1).date()
+        else:
+            end_date = datetime(year, month + 1, 1).date()
+
+        # 获取所有活跃的场地
+        courts = Court.objects.filter(is_active=True)
+
+        # 基础查询集
+        reservations = Reservation.objects.filter(
+            date__gte=start_date,
+            date__lt=end_date
+        ).select_related('user', 'timeslot', 'timeslot__court')
+
+        # 如果选择了特定场地，则过滤预约
+        if selected_court != 'all':
+            reservations = reservations.filter(timeslot__court_id=selected_court)
+
+        # 按日期和场地组织预约数据
+        reservation_dates = {}
+        for res in reservations:
+            date_key = res.date
+            court_id = str(res.timeslot.court.id)
+
+            if date_key not in reservation_dates:
+                reservation_dates[date_key] = {}
+
+            if court_id not in reservation_dates[date_key]:
+                reservation_dates[date_key][court_id] = {
+                    'count': 0,
+                    'reservations': []
+                }
+
+            reservation_dates[date_key][court_id]['count'] += 1
+            reservation_dates[date_key][court_id]['reservations'].append({
+                'id': res.id,
+                'user': {
+                    'wechat_nickname': res.user.wechat_nickname,
+                },
+                'timeslot': {
+                    'start_time': res.timeslot.start_time.strftime("%H:%M"),
+                    'end_time': res.timeslot.end_time.strftime("%H:%M"),
+                    'court': {
+                        'name': res.timeslot.court.name,
+                        'id': res.timeslot.court.id
+                    }
+                },
+                'status': res.status
+            })
+
+        cal = calendar.monthcalendar(year, month)
+        calendar_data = []
+
+        for week in cal:
+            week_data = []
+            for day in week:
+                if day == 0:
+                    week_data.append({
+                        'day': None,
+                        'reservations': {},
+                        'reservation_count': 0,
+                        'is_today': False
+                    })
+                else:
+                    current_date = datetime(year, month, day).date()
+                    date_data = reservation_dates.get(current_date, {})
+
+                    if selected_court != 'all':
+                        court_data = date_data.get(selected_court, {'count': 0, 'reservations': []})
+                        court_reservations = {selected_court: court_data}
+                    else:
+                        court_reservations = date_data
+
+                    total_count = sum(
+                        data['count'] for data in court_reservations.values()) if court_reservations else 0
+
+                    week_data.append({
+                        'day': day,
+                        'reservations': json.dumps(court_reservations, cls=DjangoJSONEncoder),
+                        'reservation_count': total_count,
+                        'is_today': current_date == today,
+                        'date': current_date
+                    })
+            calendar_data.append(week_data)
+
+        context = {
+            'title': f'{year}年{month}月预订日历',
+            'year': year,
+            'month': month,
+            'calendar_data': calendar_data,
+            'month_name': calendar.month_name[month],
+            'prev_month': {'year': year if month > 1 else year - 1, 'month': month - 1 if month > 1 else 12},
+            'next_month': {'year': year if month < 12 else year + 1, 'month': month + 1 if month < 12 else 1},
+            'today': today,
+            'opts': self.model._meta,
+            'courts': courts,
+            'selected_court': selected_court,
+        }
+
+        return TemplateResponse(request, "admin/reservation/calendar.html", context)
 
 class NewsAdmin(ExportCsvMixin, admin.ModelAdmin):
     list_display = ('title', 'url', 'image', 'description')

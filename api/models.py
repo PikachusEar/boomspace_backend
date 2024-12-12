@@ -1,7 +1,10 @@
-from django.db import models
-from django.utils import timezone
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 import uuid
+import string
+import random
+from django.db import models
+from django.utils import timezone
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 
 class UserManager(BaseUserManager):
     def create_user(self, wechat_id, email, password='123456', **extra_fields):
@@ -24,16 +27,29 @@ class UserManager(BaseUserManager):
 
         return self.create_user(wechat_id, email, password, **extra_fields)
 
+def generate_unique_user_id():
+    # 包含字母和数字的字符集（可根据需要增减）
+    chars = string.ascii_letters + string.digits
+    # 循环生成4位随机码
+    while True:
+        user_id = ''.join(random.choices(chars, k=4))
+        # 查询数据库中是否已存在该user_id
+        if not User.objects.filter(user_id=user_id).exists():
+            return user_id
+
 class User(AbstractBaseUser, PermissionsMixin):
     wechat_id = models.CharField(max_length=255, unique=True, help_text="微信唯一标识符")
     wechat_nickname = models.CharField(max_length=100, blank=True, null=True, help_text="微信昵称")
-    email = models.EmailField(blank=True, null=True, help_text="电子邮箱")
+    email = models.EmailField(unique=True,blank=True, null=True, help_text="电子邮箱")
     phone = models.CharField(max_length=20, blank=True, help_text="联系电话")
     last_name = models.CharField(max_length=30, blank=True, help_text="姓")
     first_name = models.CharField(max_length=30, blank=True, help_text="名")
     gender = models.CharField(max_length=10, choices=[('male', 'Male'), ('female', 'Female'), ('other', 'Other')], blank=True, help_text="性别")
     birth_date = models.DateField(null=True, blank=True, help_text="出生年月")
     wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="钱包余额")
+
+    user_id = models.CharField(max_length=4, unique=True, blank=True, null=True, help_text="4位用户ID")  # 新增字段
+
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(default=timezone.now)
@@ -43,6 +59,12 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     USERNAME_FIELD = 'wechat_id'
     REQUIRED_FIELDS = ['email']
+
+    def save(self, *args, **kwargs):
+        # 如果user_id为空则生成一个新的
+        if not self.user_id:
+            self.user_id = generate_unique_user_id()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.wechat_nickname} ({self.wechat_id})"
@@ -112,6 +134,7 @@ class Image(models.Model):
 
 class News(models.Model):
     image = models.ImageField(upload_to='news_images/', help_text="上传一张新闻图片")
+    poster = models.ImageField(upload_to='news_images/', null=True,help_text="上传一张新闻详情图片")
     title = models.CharField(max_length=255, help_text="新闻标题")
     description = models.TextField(help_text="新闻描述")
     url = models.URLField(max_length=200, help_text="新闻详情的链接")
@@ -146,6 +169,7 @@ class isActivated(models.Model):
 
 class f_News(models.Model):
     image = models.ImageField(upload_to='news_images/', help_text="上传一张新闻图片")
+    poster = models.ImageField(upload_to='news_images/',null=True, help_text="上传一张新闻详情图片")
     title = models.CharField(max_length=255, help_text="新闻标题")
     description = models.TextField(help_text="新闻描述")
     url = models.URLField(max_length=200, help_text="新闻详情的链接")

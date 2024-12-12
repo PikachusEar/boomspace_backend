@@ -1,0 +1,511 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .calendar-container {
+        max-width: 1200px;
+        margin: 20px auto;
+        background: white;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        border-radius: 8px;
+        padding: 20px;
+    }
+
+    .calendar-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .back-button {
+        padding: 8px 16px;
+        background: grey;
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: none;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    .back-button span {
+        color: white;
+    }
+
+    .back-button:hover {
+        background: darkgray;
+        text-decoration: none;
+    }
+
+    .back-button::before {
+        content: "←";
+        font-size: 16px;
+        color: white;
+    }
+
+    .court-tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #f0f0f0;
+        padding-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    .court-tab {
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-decoration: none;
+        color: #666;
+        background: #f8f9fa;
+    }
+
+    .court-tab:hover {
+        background: #e8f4f8;
+        color: #417690;
+        text-decoration: none;
+    }
+
+    .court-tab.active {
+        background: #417690;
+        color: white;
+    }
+
+    .calendar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+
+    .calendar-nav {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+    }
+
+    .calendar-nav a {
+        padding: 8px 16px;
+        background: #417690;
+        color: white !important;
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    .calendar-nav a:hover {
+        background: #2b5573;
+        text-decoration: none;
+    }
+
+    .calendar-title {
+        font-size: 20px;
+        font-weight: bold;
+        color: #417690;
+        padding: 0 15px;
+    }
+
+    .calendar-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 4px;
+        margin-top: 20px;
+    }
+
+    .calendar-table th {
+        background: #417690;
+        color: white;
+        padding: 12px;
+        text-align: center;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .calendar-table td {
+        padding: 0;
+        vertical-align: top;
+        height: 100px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+    }
+
+    .calendar-day {
+        position: relative;
+        height: 100%;
+        padding: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .calendar-day:hover {
+        background: #e8f4f8;
+    }
+
+    .date-number {
+        font-size: 16px;
+        font-weight: 500;
+        text-align: center;
+        margin-bottom: 8px;
+    }
+
+    .today .date-number {
+        background: #417690;
+        color: white;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        margin: 0 auto 8px;
+    }
+
+    .reservation-count {
+        width: 24px;
+        height: 24px;
+        line-height: 24px;
+        background: #e8f4f8;
+        color: #417690;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 500;
+        margin: 0 auto;
+    }
+
+    .has-events .reservation-count {
+        background: #B8860B;
+        color: white;
+    }
+
+    .empty-day {
+        background: #eee;
+        cursor: default;
+    }
+
+    .weekend {
+        background: #f0f7fa;
+    }
+
+    .date-detail-panel {
+        margin-top: 20px;
+        padding: 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: none;
+    }
+
+    .date-detail-panel.active {
+        display: block;
+    }
+
+    .detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .detail-title {
+        font-size: 18px;
+        font-weight: 500;
+        color: #417690;
+    }
+
+    .reservation-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 15px;
+    }
+
+    .reservation-item {
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        border-left: 4px solid #417690;
+    }
+
+    .reservation-time {
+        font-weight: 500;
+        color: #417690;
+        margin-bottom: 5px;
+    }
+
+    .reservation-user {
+        font-size: 14px;
+        color: #666;
+    }
+
+    .reservation-status {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        margin-top: 5px;
+    }
+
+    .status-confirmed {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .status-pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .status-cancelled {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .no-reservations {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="calendar-container">
+    <div class="calendar-actions">
+        <a href="{% url 'admin:api_reservation_changelist' %}" class="back-button">
+            <span>返回预订列表</span>
+        </a>
+    </div>
+
+    <div class="court-tabs">
+        <a href="?year={{ year }}&month={{ month }}&court=all"
+           class="court-tab {% if selected_court == 'all' %}active{% endif %}">
+            全部场地
+        </a>
+        {% for court in courts %}
+        <a href="?year={{ year }}&month={{ month }}&court={{ court.id }}"
+           class="court-tab {% if selected_court == court.id|stringformat:'s' %}active{% endif %}">
+            {{ court.name }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="calendar-header">
+        <div class="calendar-nav">
+            <a href="?year={{ prev_month.year }}&month={{ prev_month.month }}&court={{ selected_court }}">
+                ← {{ prev_month.year }}年{{ prev_month.month }}月
+            </a>
+            <span class="calendar-title">{{ year }}年{{ month }}月</span>
+            <a href="?year={{ next_month.year }}&month={{ next_month.month }}&court={{ selected_court }}">
+                {{ next_month.year }}年{{ next_month.month }}月 →
+            </a>
+        </div>
+    </div>
+
+    <table class="calendar-table">
+        <thead>
+            <tr>
+                <th>周一</th>
+                <th>周二</th>
+                <th>周三</th>
+                <th>周四</th>
+                <th>周五</th>
+                <th class="weekend">周六</th>
+                <th class="weekend">周日</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for week in calendar_data %}
+            <tr>
+                {% for day in week %}
+                    {% if day.day %}
+                        <td class="{% if day.reservation_count > 0 %}has-events{% endif %} {% if day.is_today %}today{% endif %} {% if forloop.counter > 5 %}weekend{% endif %}">
+                            <div class="calendar-day"
+                                 data-date="{{ day.date|date:'Y-m-d' }}"
+                                 data-reservations='{{ day.reservations|safe }}'>
+                                <div class="date-number">{{ day.day }}</div>
+                                {% if day.reservation_count > 0 %}
+                                <div class="reservation-count">
+                                    {{ day.reservation_count }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                    {% else %}
+                        <td class="empty-day"></td>
+                    {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div id="date-detail-panel" class="date-detail-panel">
+        <div class="detail-header">
+            <h3 id="detail-title" class="detail-title"></h3>
+        </div>
+        <div id="detail-content"></div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dateDetailPanel = document.getElementById('date-detail-panel');
+    const detailTitle = document.getElementById('detail-title');
+    const detailContent = document.getElementById('detail-content');
+    const selectedCourt = '{{ selected_court }}';
+
+    function handleDateClick(date, reservationsData) {
+        const reservations = JSON.parse(reservationsData);
+        detailTitle.textContent = `${date} 预约详情`;
+
+        let content = '';
+        let hasReservations = false;
+
+        if (selectedCourt !== 'all') {
+            const courtReservations = reservations[selectedCourt]?.reservations || [];
+            if (courtReservations.length > 0) {
+                hasReservations = true;
+                content = generateReservationsTable(courtReservations);
+            }
+        } else {
+            // 如果是全部场地模式，合并所有场地的预约
+            let allReservations = [];
+            Object.values(reservations).forEach(courtData => {
+                if (courtData.reservations && courtData.reservations.length > 0) {
+                    hasReservations = true;
+                    allReservations = allReservations.concat(courtData.reservations);
+                }
+            });
+
+            if (hasReservations) {
+                content = generateReservationsTable(allReservations);
+            }
+        }
+
+        if (!hasReservations) {
+            content = '<div class="no-reservations">当日无预约</div>';
+        }
+
+        detailContent.innerHTML = content;
+        dateDetailPanel.classList.add('active');
+        dateDetailPanel.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // 新的函数：生成0:00-24:00的表格并将预约分配到对应的小时行
+    function generateReservationsTable(reservations) {
+        // 先对预约排序（可选，按开始时间排序）
+        reservations.sort((a, b) => a.timeslot.start_time.localeCompare(b.timeslot.start_time));
+
+        // 创建从0到23小时的数组，每个元素为数组存储对应小时内的预约
+        const hours = Array.from({ length: 24 }, () => []);
+
+        reservations.forEach(reservation => {
+            const startHour = parseInt(reservation.timeslot.start_time.split(':')[0], 10);
+            const endHour = parseInt(reservation.timeslot.end_time.split(':')[0], 10);
+
+            // 将预约分配给从startHour到endHour的每个小时格
+            for (let h = startHour; h < endHour; h++) {
+                // 防止超出24点的情况，如结束时间为"24:00"
+                if (h < 24) {
+                    hours[h].push(reservation);
+                }
+            }
+        });
+
+        // 构建表格HTML
+        let tableHtml = `
+            <table class="reservation-table" style="width:100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background:#f8f9fa; border-bottom:1px solid #dee2e6;">
+                        <th style="padding:8px; text-align:left; width:120px; border-right: 1px solid #dee2e6;">时间</th>
+                        <th style="padding:8px; text-align:left;">预约信息</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        for (let h = 0; h < 24; h++) {
+            const hourLabel = `${h.toString().padStart(2,'0')}:00 - ${(h+1).toString().padStart(2,'0')}:00`;
+            let cellContent = '';
+
+            if (hours[h].length > 0) {
+                cellContent = hours[h].map(reservation => `
+                    <div class="reservation-item" style="margin-bottom:8px; padding:8px; background:#f8f9fa; border-left:4px solid #417690; border-radius:4px;">
+                        <div class="reservation-time" style="font-weight:bold; color:#417690;">
+                            ${reservation.timeslot.court.name}<br>
+                            ${reservation.timeslot.start_time} - ${reservation.timeslot.end_time}
+                        </div>
+                        <div class="reservation-user" style="font-size:14px; color:#666;">
+                            <strong>预约人：</strong>${reservation.user.wechat_nickname}
+                        </div>
+                        <span class="reservation-status status-${reservation.status.toLowerCase()}" style="
+                            display:inline-block; margin-top:5px; padding:2px 8px; border-radius:12px; font-size:12px;
+                            ${getStatusStyle(reservation.status)}">
+                            ${reservation.status}
+                        </span>
+                    </div>
+                `).join('');
+            } else {
+                cellContent = '<div style="color:#999;">无预约</div>';
+            }
+
+            tableHtml += `
+                <tr style="border-bottom:1px solid #dee2e6;">
+                    <td style="padding:8px; vertical-align: top; font-weight:bold; color:#417690;">${hourLabel}</td>
+                    <td style="padding:8px; vertical-align: top;">${cellContent}</td>
+                </tr>
+            `;
+        }
+
+        tableHtml += `
+                </tbody>
+            </table>
+        `;
+
+        return tableHtml;
+    }
+
+    function getStatusStyle(status) {
+        switch (status.toLowerCase()) {
+            case 'confirmed':
+                return 'background:#d4edda; color:#155724;';
+            case 'pending':
+                return 'background:#fff3cd; color:#856404;';
+            case 'cancelled':
+                return 'background:#f8d7da; color:#721c24;';
+            default:
+                return '';
+        }
+    }
+
+    document.querySelectorAll('.calendar-day[data-date]').forEach(day => {
+        day.addEventListener('click', function() {
+            const date = this.dataset.date;
+            const reservations = this.dataset.reservations;
+            handleDateClick(date, reservations);
+        });
+    });
+});
+</script>
+{% endblock %}
