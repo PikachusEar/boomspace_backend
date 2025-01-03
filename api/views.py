@@ -57,6 +57,12 @@ def wechat_login(request):
     # 判断用户是否已注册email
     is_registered = bool(user.email)
 
+    try:
+        activation_status = isActivated.objects.first()
+        is_activated = activation_status.is_activated if activation_status else True
+    except isActivated.DoesNotExist:
+        is_activated = True
+
     # 为用户创建或获取现有的Token
     token, _ = Token.objects.get_or_create(user=user)
 
@@ -66,7 +72,8 @@ def wechat_login(request):
         'message': '登录成功',
         'token': token.key,
         'is_new_user': created,
-        'is_registered': is_registered
+        'is_registered': is_registered,
+        'is_activated': is_activated
     })
 
 
