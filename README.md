@@ -43,47 +43,62 @@ Gym Reservation System 是一个为体育馆场地预约而设计的微信小程
 ## 更新证书
 
 ### 先备份所有旧证书：
-···
-bash
+```bash
 sudo mv fullchain.crt fullchain.crt.bak
-···
+```
 
 ### 创建备份目录
-···
+```bash
 sudo mkdir backup_certs
 sudo mv *.crt *.key *.csr backup_certs/
-···
+```
 创建新的证书文件：
 
-bash
+```bash
+sudo vim boomspace.acornyun.com.crt
+```
 
 
 ### 创建服务器证书
+```
 sudo vim boomspace.acornyun.com.crt
+```
 #### 复制新的服务器证书内容（以 -----BEGIN CERTIFICATE----- 开头的内容）
 
 ### 创建私钥文件
+```
 sudo vim boomspace.acornyun.com.key
+```
 ##### 复制新的私钥内容（以 -----BEGIN RSA PRIVATE KEY----- 开头的内容）
 
 ### 创建根证书文件
+```
 sudo vim root_bundle.crt
+```
 ### 复制新的根证书内容
 创建证书链：
-bash
-
+```bash
+# 合并服务器证书和根证书
+sudo bash -c 'cat boomspace.acornyun.com.crt root_bundle.crt > fullchain.crt'
+```
 Copy
 ### 合并服务器证书和根证书
+```
 sudo bash -c 'cat boomspace.acornyun.com.crt root_bundle.crt > fullchain.crt'
+```
 ###设置正确的权限：
-bash
-
-Copy
+```bash
 sudo chmod 644 *.crt
 sudo chmod 600 *.key
-重启 Nginx：
-bash
+```
+### 重启 Nginx：
+```bash
+# 测试nginx配置
+sudo nginx -t
 
+# 重启nginx服务
+sudo systemctl restart nginx
+```
 Copy
 sudo nginx -t
 sudo systemctl restart nginx
