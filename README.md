@@ -86,7 +86,7 @@ Copy
 ```
 sudo bash -c 'cat boomspace.acornyun.com.crt root_bundle.crt > fullchain.crt'
 ```
-###设置正确的权限：
+### 设置正确的权限：
 ```bash
 sudo chmod 644 *.crt
 sudo chmod 600 *.key
@@ -99,9 +99,6 @@ sudo nginx -t
 # 重启nginx服务
 sudo systemctl restart nginx
 ```
-Copy
-sudo nginx -t
-sudo systemctl restart nginx
-需要我帮你执行这些步骤吗？我们可以一步一步来，确保每个文件都正确替换。
+
 
 
