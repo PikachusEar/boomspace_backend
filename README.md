@@ -39,3 +39,54 @@ Gym Reservation System 是一个为体育馆场地预约而设计的微信小程
  - sudo apt-get install python3-dev default-libmysqlclient-dev build-essential
  - (venv) pip install -r requirements.txt
  - Nginx权限：需要chmod 755 static* and media*，否则403  或者   配置static和media到/www/下
+
+## 更新证书
+
+### 先备份所有旧证书：
+···
+bash
+sudo mv fullchain.crt fullchain.crt.bak
+···
+
+### 创建备份目录
+···
+sudo mkdir backup_certs
+sudo mv *.crt *.key *.csr backup_certs/
+···
+创建新的证书文件：
+
+bash
+
+
+### 创建服务器证书
+sudo vim boomspace.acornyun.com.crt
+#### 复制新的服务器证书内容（以 -----BEGIN CERTIFICATE----- 开头的内容）
+
+### 创建私钥文件
+sudo vim boomspace.acornyun.com.key
+##### 复制新的私钥内容（以 -----BEGIN RSA PRIVATE KEY----- 开头的内容）
+
+### 创建根证书文件
+sudo vim root_bundle.crt
+### 复制新的根证书内容
+创建证书链：
+bash
+
+Copy
+### 合并服务器证书和根证书
+sudo bash -c 'cat boomspace.acornyun.com.crt root_bundle.crt > fullchain.crt'
+###设置正确的权限：
+bash
+
+Copy
+sudo chmod 644 *.crt
+sudo chmod 600 *.key
+重启 Nginx：
+bash
+
+Copy
+sudo nginx -t
+sudo systemctl restart nginx
+需要我帮你执行这些步骤吗？我们可以一步一步来，确保每个文件都正确替换。
+
+
