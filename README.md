@@ -75,13 +75,13 @@ sudo vim boomspace.acornyun.com.key
 ```
 sudo vim root_bundle.crt
 ```
-### 复制新的根证书内容
-创建证书链：
+#### 复制新的根证书内容
+### 创建证书链：
 ```bash
 # 合并服务器证书和根证书
 sudo bash -c 'cat boomspace.acornyun.com.crt root_bundle.crt > fullchain.crt'
 ```
-Copy
+
 ### 合并服务器证书和根证书
 ```
 sudo bash -c 'cat boomspace.acornyun.com.crt root_bundle.crt > fullchain.crt'
