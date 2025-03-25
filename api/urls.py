@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import home, wechat_login, available_timeslots, make_reservation, view_reservations_and_balance, view_user_info, update_user_info, get_images, make_combo_reservation
+from .views import home, wechat_login, available_timeslots, make_reservation, view_reservations_and_balance, view_user_info, update_user_info, get_images, make_combo_reservation, web_login, web_register
 from django.contrib import admin
 
 # 修改admin站点的标题
@@ -18,6 +18,8 @@ urlpatterns = [
     path('update_user_info/', update_user_info, name='update_user_info'),
     path('get_images/', get_images, name='get_images(homepage)'),
     path('make_combo_reservation', make_combo_reservation, name='make_combo_reservation'),
+    path('web_login', web_login, name='web_login'),
+    path('web_register', web_register, name='web_register'),
 
 ]
 

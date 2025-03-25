@@ -15,6 +15,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.utils.timezone import localtime
 from django.conf import settings
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
 
 def home(request):
     return HttpResponse("Hello, world. This is the API home page.")
@@ -212,7 +214,7 @@ def make_reservation(request):
         if timeslots_qs.count() != len(unique_timeslot_ids):
             return JsonResponse({
                 'status': 'error',
-                'message': '一个或多个所选时间段不存在'
+                'message': 'Failed reservation: One or more time slots not exist'
             }, status=404)
 
         timeslots_dict = {str(slot.id): slot for slot in timeslots_qs}
@@ -249,7 +251,7 @@ def make_reservation(request):
         if reservation_conflicts.exists():
             return JsonResponse({
                 'status': 'error',
-                'message': '预定失败：一个或多个时间段已被预订'
+                'message': 'Failed reservation: One or more time slots have already been booked'
             }, status=400)
 
         # 计算总费用
@@ -261,7 +263,7 @@ def make_reservation(request):
         if user.wallet_balance < total_price:
             return JsonResponse({
                 'status': 'error',
-                'message': '预定失败，账户余额不足'
+                'message': 'Failed reservation: Insufficient account balance'
             }, status=400)
 
         # 创建所有预定
@@ -462,7 +464,7 @@ def view_reservations_and_balance(request):
 
     # 获取用户的所有预定信息
     reservations = Reservation.objects.filter(user=user).values(
-        'date', 'created_at', 'timeslot__start_time', 'timeslot__end_time', 'timeslot__court__name', 'status'
+        'date', 'created_at', 'timeslot__start_time', 'timeslot__end_time', 'timeslot__court__name', 'status','unique_id'
     ).order_by('date', 'timeslot__start_time')
 
     # 准备预定信息
@@ -472,7 +474,8 @@ def view_reservations_and_balance(request):
         'start_time': reservation['timeslot__start_time'].strftime("%H:%M"),
         'end_time': reservation['timeslot__end_time'].strftime("%H:%M"),
         'court_name': reservation['timeslot__court__name'],
-        'status': reservation['status']
+        'status': reservation['status'],
+        'unique_id': reservation['unique_id'],
     } for reservation in reservations]
 
     # 获取用户的钱包余额
@@ -575,3 +578,166 @@ def get_images(request):
 #    return JsonResponse({'status': 'success', 'message': f'Logged in as {user.wechat_nickname}', 'token': token.key})
 
 
+@api_view(['POST'])
+def web_login(request):
+    """
+    Web login endpoint that supports both email and phone authentication
+    Accepts POST request with:
+    {
+        "username": "user@example.com" or "1234567890",
+        "password": "password123"
+    }
+    """
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    if not username or not password:
+        return Response({
+            'status': 'error',
+            'message': 'Please provide both username and password'
+        }, status=400)
+
+    # Determine if username is email or phone
+    try:
+        validate_email(username)
+        # If no ValidationError, this is an email
+        user = User.objects.filter(email=username).first()
+    except ValidationError:
+        # If ValidationError, treat as phone number
+        user = User.objects.filter(phone=username).first()
+
+    if not user:
+        return Response({
+            'status': 'error',
+            'message': 'Invalid username or password'
+        }, status=404)
+
+    # Verify password
+    if not user.check_password(password):
+        return Response({
+            'status': 'error',
+            'message': 'Invalid username or password'
+        }, status=404)
+
+    # Check activation status
+    try:
+        activation_status = isActivated.objects.first()
+        is_activated = activation_status.is_activated if activation_status else True
+    except isActivated.DoesNotExist:
+        is_activated = True
+
+    # Get or create token
+    token, _ = Token.objects.get_or_create(user=user)
+
+    # Check if user has completed registration (has both email and phone)
+    is_registered = bool(user.email and user.phone)
+
+    return Response({
+        'status': 'success',
+        'message': 'Login successful',
+        'token': token.key,
+        'is_new_user': False,  # Always false for web login
+        'is_registered': is_registered,
+        'is_activated': is_activated
+    })
+
+
+@api_view(['POST'])
+def web_register(request):
+    """
+    Web registration endpoint that handles new user registration
+    Accepts POST request with:
+    {
+        "email": "user@example.com",
+        "phone": "1234567890",
+        "password": "password123",
+        "confirmPassword": "password123"
+    }
+    """
+    email = request.data.get('email')
+    phone = request.data.get('phone')
+    password = request.data.get('password')
+    confirm_password = request.data.get('confirmPassword')
+
+    # Validate required fields
+    if not all([email, phone, password, confirm_password]):
+        return Response({
+            'status': 'error',
+            'message': 'Please provide all required fields'
+        }, status=400)
+
+    # Validate email format
+    try:
+        validate_email(email)
+    except ValidationError:
+        return Response({
+            'status': 'error',
+            'message': 'Invalid email format'
+        }, status=400)
+
+    # Validate phone format (basic validation)
+    if not phone.isdigit() or len(phone) < 10:
+        return Response({
+            'status': 'error',
+            'message': 'Invalid phone number format'
+        }, status=400)
+
+    # Check password match
+    if password != confirm_password:
+        return Response({
+            'status': 'error',
+            'message': 'Passwords do not match'
+        }, status=400)
+
+    # Check if email already exists
+    if User.objects.filter(email=email).exists():
+        return Response({
+            'status': 'error',
+            'message': 'Email already registered'
+        }, status=400)
+
+    # Check if phone already exists
+    if User.objects.filter(phone=phone).exists():
+        return Response({
+            'status': 'error',
+            'message': 'Phone number already registered'
+        }, status=400)
+
+    try:
+        with transaction.atomic():
+            # Create new user with temporary wechat_id
+            temp_wechat_id = f'web_user_{uuid.uuid4().hex[:8]}'
+
+            # Create user
+            user = User.objects.create(
+                wechat_id=temp_wechat_id,
+                email=email,
+                phone=phone,
+                wechat_nickname=email.split('@')[0],  # Use email username as initial nickname
+            )
+            user.set_password(password)
+            user.save()
+
+            # Create token for the new user
+            token, _ = Token.objects.get_or_create(user=user)
+
+            # Get activation status
+            try:
+                activation_status = isActivated.objects.first()
+                is_activated = activation_status.is_activated if activation_status else True
+            except isActivated.DoesNotExist:
+                is_activated = True
+
+            return Response({
+                'status': 'success',
+                'message': 'Registration successful',
+                'is_new_user': True,
+                'is_registered': True,
+                'is_activated': is_activated
+            })
+
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': f'Registration failed: {str(e)}'
+        }, status=500)

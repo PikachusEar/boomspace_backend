@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-3&lf+gcz5k_qq27ib#i_it6r95vy(k!zaz*#$iv#szua+ntml9'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1','47.89.131.32','boomspace.ca','boomspace.acornyun.com']
@@ -45,6 +45,8 @@ REST_FRAMEWORK = {
 AUTH_USER_MODEL = 'api.User'
 MEDIA_ROOT = '/var/www/boomspace/media'
 MEDIA_URL = 'https://boomspace.acornyun.com/media/'
+#MEDIA_URL = '/media/'
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -57,17 +59,41 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'api',
     'rest_framework',
-    'rest_framework.authtoken'
+    'rest_framework.authtoken',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = [
+    #"http://localhost:5173",  # Vite dev server
+    #"http://localhost:3000",  # Alternative development port
+    "https://boomspace.ca",
+    "https://www.boomspace.ca",
+    "https://boomspace.acornyun.com",
+    "https://www.boomspace.acornyun.com",
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+# Optional: Allow specific HTTP methods
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
 ]
 
 ROOT_URLCONF = 'Wechat_django.urls' 

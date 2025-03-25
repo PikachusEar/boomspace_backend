@@ -23,6 +23,7 @@ lib64/
 local_settings.py
 db.sqlite3
 media/
+venv-linux/
 
 # Migrations
 api/migrations/

@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 
 class UserManager(BaseUserManager):
-    def create_user(self, wechat_id, email, password='123456', **extra_fields):
+    def create_user(self, wechat_id, email, password, **extra_fields):
         if not wechat_id:
             raise ValueError('WeChat ID must be set')
         email = self.normalize_email(email)
@@ -41,14 +41,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     wechat_id = models.CharField(max_length=255, unique=True, help_text="微信唯一标识符")
     wechat_nickname = models.CharField(max_length=100, blank=True, null=True, help_text="微信昵称")
     email = models.EmailField(unique=True,blank=True, null=True, help_text="电子邮箱")
-    phone = models.CharField(max_length=20, blank=True, help_text="联系电话")
+    phone = models.CharField(max_length=20, blank=True,null=True, help_text="联系电话")
     last_name = models.CharField(max_length=30, blank=True, help_text="姓")
     first_name = models.CharField(max_length=30, blank=True, help_text="名")
     gender = models.CharField(max_length=10, choices=[('male', 'Male'), ('female', 'Female'), ('other', 'Other')], blank=True, help_text="性别")
     birth_date = models.DateField(null=True, blank=True, help_text="出生年月")
     wallet_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="钱包余额")
 
-    user_id = models.CharField(max_length=4, unique=True, blank=True, null=True, help_text="4位用户ID")  # 新增字段
+    user_id = models.CharField(max_length=4, unique=True, blank=True, null=True, help_text="4位用户ID")  # 新增用户id, 用于多平台登录
 
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

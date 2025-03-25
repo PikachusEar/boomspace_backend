@@ -41,7 +41,31 @@ class ExportCsvMixin:
 class UserAdmin(ExportCsvMixin, admin.ModelAdmin):
     list_display = ['user_id','wechat_nickname', 'phone', 'email', 'first_name', 'last_name', 'gender', 'birth_date', 'wallet_balance', 'date_joined']
     search_fields = ['user_id','wechat_nickname', 'first_name', 'last_name', 'wechat_id', 'phone', 'email']
+    fields = [
+        'wechat_id',
+        'wechat_nickname',
+        'phone',
+        'email',
+        'first_name',
+        'last_name',
+        'gender',
+        'birth_date',
+        'wallet_balance',
+        'password',
+        'is_staff',
+        'is_active'
+    ]
     actions = ['export_as_csv']
+
+    def save_model(self, request, obj, form, change):
+        """
+        在 Admin 中点击保存用户时，对 password 字段进行判断，
+        如果是新增用户或修改了 'password' 字段，就用 set_password() 加密后再保存
+        """
+        # 如果是新建对象（没有 pk），或密码字段确实被修改了
+        if not obj.pk or 'password' in form.changed_data:
+            obj.set_password(obj.password)
+        super().save_model(request, obj, form, change)
 
 
 class ReservationAdmin(ExportCsvMixin, admin.ModelAdmin):
