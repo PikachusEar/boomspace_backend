@@ -1,4 +1,4 @@
-import uuid
+import uuid, time
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from datetime import datetime, timedelta
@@ -160,6 +160,7 @@ def available_timeslots(request):
 
     # Combine individual and combo timeslots
     timeslots_data.extend(combo_timeslots)
+    time.sleep(1.5)
 
     return JsonResponse({'available_timeslots': timeslots_data})
 
@@ -480,7 +481,7 @@ def view_reservations_and_balance(request):
 
     # 获取用户的钱包余额
     wallet_balance = user.wallet_balance
-
+    time.sleep(1.5)
     # 返回预定信息和钱包余额
     return Response({
         'reservations': reservations_data,
@@ -557,6 +558,7 @@ def get_images(request):
 
         } for news in newses
     ]
+    time.sleep(1.25)
     return JsonResponse({'images': image_data, 'news': news_data})
 
 
